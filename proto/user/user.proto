@@ -1,0 +1,21 @@
+syntax = "proto3";
+package user;
+option go_package = "grpcshop/gen/user";
+
+service UserService {
+  rpc Register(RegisterRequest) returns (RegisterResponse);
+  rpc GetUser(GetUserRequest)   returns (UserResponse);
+}
+
+message RegisterRequest {
+  string email = 1;
+  string name  = 2;
+}
+message RegisterResponse { string user_id = 1; }
+
+message GetUserRequest  { string user_id = 1; }
+message UserResponse {
+  string user_id = 1;
+  string email   = 2;
+  string name    = 3;
+}

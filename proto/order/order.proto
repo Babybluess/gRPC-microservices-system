@@ -1,0 +1,21 @@
+syntax = "proto3";
+package order;
+option go_package = "grpcshop/gen/order";
+
+service OrderService {
+  rpc CreateOrder(CreateOrderRequest) returns (OrderResponse);
+  rpc ListOrders (ListOrdersRequest)  returns (stream OrderResponse);
+}
+
+message CreateOrderRequest {
+  string user_id    = 1;
+  string product_id = 2;
+  int32  quantity   = 3;
+}
+message ListOrdersRequest { string user_id = 1; }
+message OrderResponse {
+  string order_id   = 1;
+  string user_id    = 2;
+  string product_id = 3;
+  int32  quantity   = 4;
+}

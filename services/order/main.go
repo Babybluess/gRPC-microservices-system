@@ -18,6 +18,7 @@ import (
 	pb "grpcshop/gen/order"
 	"grpcshop/internal/discovery"
 	"grpcshop/internal/interceptors"
+	"grpcshop/internal/tlsconfig"
 )
 
 const (
@@ -57,6 +58,11 @@ func (s *server) ListOrders(req *pb.ListOrdersRequest, stream pb.OrderService_Li
 }
 
 func main() {
+	tlsCreds, err := tlsconfig.Server("certs/server.pem", "certs/server-key.pem")
+	if err != nil {
+		log.Fatal("tls:", err)
+	}
+
 	registry, err := discovery.NewRegistry("localhost:8500")
 	if err != nil {
 		log.Fatal("consul:", err)
@@ -72,6 +78,7 @@ func main() {
 	}
 
 	grpcServer := grpc.NewServer(
+		grpc.Creds(tlsCreds),
 		grpc.ChainUnaryInterceptor(interceptors.UnaryLogger, interceptors.UnaryAuth),
 	)
 	pb.RegisterOrderServiceServer(grpcServer, &server{})

@@ -6,22 +6,28 @@ import (
 	"time"
 
 	"google.golang.org/grpc"
-	"google.golang.org/grpc/credentials/insecure"
 	"google.golang.org/grpc/metadata"
 
 	orderpb "grpcshop/gen/order"
 	userpb  "grpcshop/gen/user"
 	"grpcshop/internal/discovery"
+	"grpcshop/internal/tlsconfig"
 )
 
 func main() {
+	tlsCreds, err := tlsconfig.Client("certs/ca.pem")
+	if err != nil {
+		log.Fatal("tls:", err)
+	}
+	credOpt := grpc.WithTransportCredentials(tlsCreds)
+
 	registry, err := discovery.NewRegistry("localhost:8500")
 	if err != nil {
 		log.Fatal(err)
 	}
 
-	userConn  := mustDial(registry, "user-service")
-	orderConn := mustDial(registry, "order-service")
+	userConn  := mustDial(registry, "user-service", credOpt)
+	orderConn := mustDial(registry, "order-service", credOpt)
 	defer userConn.Close()
 	defer orderConn.Close()
 
@@ -68,12 +74,12 @@ func main() {
 	}
 }
 
-func mustDial(r *discovery.Registry, name string) *grpc.ClientConn {
+func mustDial(r *discovery.Registry, name string, opt grpc.DialOption) *grpc.ClientConn {
 	addr, err := r.Discover(name)
 	if err != nil {
 		log.Fatalf("discover %s: %v", name, err)
 	}
-	conn, err := grpc.NewClient(addr, grpc.WithTransportCredentials(insecure.NewCredentials()))
+	conn, err := grpc.NewClient(addr, opt)
 	if err != nil {
 		log.Fatalf("dial %s: %v", name, err)
 	}

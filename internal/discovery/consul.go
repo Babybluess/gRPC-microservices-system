@@ -29,6 +29,8 @@ func (r *Registry) Register(name, id, host string, port int) error {
 		Port:    port,
 		Check: &api.AgentServiceCheck{
 			GRPC:                           fmt.Sprintf("%s:%d", host, port),
+			GRPCUseTLS:                     true,
+			TLSSkipVerify:                  true, // Consul agent doesn't have the mkcert CA; skip verify for health probes only
 			Interval:                       "10s",
 			Timeout:                        "2s",
 			DeregisterCriticalServiceAfter: "30s",

@@ -10,6 +10,8 @@ import (
 	"syscall"
 
 	"google.golang.org/grpc"
+	"google.golang.org/grpc/health"
+	"google.golang.org/grpc/health/grpc_health_v1"
 	"google.golang.org/grpc/reflection"
 
 	pb "grpcshop/gen/user"
@@ -65,6 +67,9 @@ func main() {
 		),
 	)
 	pb.RegisterUserServiceServer(grpcServer, &server{users: make(map[string]*pb.UserResponse)})
+	healthSrv := health.NewServer()
+	grpc_health_v1.RegisterHealthServer(grpcServer, healthSrv)
+	healthSrv.SetServingStatus("", grpc_health_v1.HealthCheckResponse_SERVING)
 	reflection.Register(grpcServer)
 
 	log.Printf("user-service listening on :%d", port)

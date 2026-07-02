@@ -11,6 +11,8 @@ import (
 	"time"
 
 	"google.golang.org/grpc"
+	"google.golang.org/grpc/health"
+	"google.golang.org/grpc/health/grpc_health_v1"
 	"google.golang.org/grpc/reflection"
 
 	pb "grpcshop/gen/order"
@@ -73,6 +75,9 @@ func main() {
 		grpc.ChainUnaryInterceptor(interceptors.UnaryLogger, interceptors.UnaryAuth),
 	)
 	pb.RegisterOrderServiceServer(grpcServer, &server{})
+	healthSrv := health.NewServer()
+	grpc_health_v1.RegisterHealthServer(grpcServer, healthSrv)
+	healthSrv.SetServingStatus("", grpc_health_v1.HealthCheckResponse_SERVING)
 	reflection.Register(grpcServer)
 
 	log.Printf("order-service listening on :%d", port)

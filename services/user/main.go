@@ -18,6 +18,7 @@ import (
 	"grpcshop/internal/discovery"
 	"grpcshop/internal/interceptors"
 	"grpcshop/internal/tlsconfig"
+	"grpcshop/internal/tracing"
 )
 
 const (
@@ -47,6 +48,13 @@ func (s *server) GetUser(_ context.Context, req *pb.GetUserRequest) (*pb.UserRes
 }
 
 func main() {
+	ctx := context.Background()
+
+	shutdownTracer, err := tracing.Init(ctx, serviceName)
+	if err != nil {
+		log.Fatal("tracer:", err)
+	}
+
 	tlsCreds, err := tlsconfig.Server("certs/server.pem", "certs/server-key.pem")
 	if err != nil {
 		log.Fatal("tls:", err)
@@ -70,6 +78,7 @@ func main() {
 		grpc.Creds(tlsCreds),
 		grpc.ChainUnaryInterceptor(
 			interceptors.UnaryLogger,
+			interceptors.UnaryTracing,
 			interceptors.UnaryAuth,
 		),
 	)
@@ -87,6 +96,7 @@ func main() {
 		<-quit
 		log.Println("shutting down user-service...")
 		grpcServer.GracefulStop()
+		_ = shutdownTracer(ctx)
 	}()
 
 	if err := grpcServer.Serve(lis); err != nil {

@@ -19,6 +19,7 @@ import (
 	"grpcshop/internal/discovery"
 	"grpcshop/internal/interceptors"
 	"grpcshop/internal/tlsconfig"
+	"grpcshop/internal/tracing"
 )
 
 const (
@@ -58,6 +59,13 @@ func (s *server) ListOrders(req *pb.ListOrdersRequest, stream pb.OrderService_Li
 }
 
 func main() {
+	ctx := context.Background()
+
+	shutdownTracer, err := tracing.Init(ctx, serviceName)
+	if err != nil {
+		log.Fatal("tracer:", err)
+	}
+
 	tlsCreds, err := tlsconfig.Server("certs/server.pem", "certs/server-key.pem")
 	if err != nil {
 		log.Fatal("tls:", err)
@@ -79,7 +87,11 @@ func main() {
 
 	grpcServer := grpc.NewServer(
 		grpc.Creds(tlsCreds),
-		grpc.ChainUnaryInterceptor(interceptors.UnaryLogger, interceptors.UnaryAuth),
+		grpc.ChainUnaryInterceptor(
+			interceptors.UnaryLogger,
+			interceptors.UnaryTracing,
+			interceptors.UnaryAuth,
+		),
 	)
 	pb.RegisterOrderServiceServer(grpcServer, &server{})
 	healthSrv := health.NewServer()
@@ -94,6 +106,7 @@ func main() {
 		signal.Notify(quit, syscall.SIGTERM, syscall.SIGINT)
 		<-quit
 		grpcServer.GracefulStop()
+		_ = shutdownTracer(ctx)
 	}()
 
 	if err := grpcServer.Serve(lis); err != nil {

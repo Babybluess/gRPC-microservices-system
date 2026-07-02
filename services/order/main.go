@@ -11,9 +11,11 @@ import (
 	"time"
 
 	"google.golang.org/grpc"
+	"google.golang.org/grpc/codes"
 	"google.golang.org/grpc/health"
 	"google.golang.org/grpc/health/grpc_health_v1"
 	"google.golang.org/grpc/reflection"
+	"google.golang.org/grpc/status"
 
 	pb "grpcshop/gen/order"
 	"grpcshop/internal/config"
@@ -34,6 +36,15 @@ type server struct {
 }
 
 func (s *server) CreateOrder(_ context.Context, req *pb.CreateOrderRequest) (*pb.OrderResponse, error) {
+	if req.UserId == "" {
+		return nil, status.Error(codes.InvalidArgument, "user_id is required")
+	}
+	if req.ProductId == "" {
+		return nil, status.Error(codes.InvalidArgument, "product_id is required")
+	}
+	if req.Quantity <= 0 {
+		return nil, status.Errorf(codes.InvalidArgument, "quantity must be positive, got %d", req.Quantity)
+	}
 	order := &pb.OrderResponse{
 		OrderId:   fmt.Sprintf("ord_%d", len(s.orders)+1),
 		UserId:    req.UserId,
@@ -46,6 +57,9 @@ func (s *server) CreateOrder(_ context.Context, req *pb.CreateOrderRequest) (*pb
 }
 
 func (s *server) ListOrders(req *pb.ListOrdersRequest, stream pb.OrderService_ListOrdersServer) error {
+	if req.UserId == "" {
+		return status.Error(codes.InvalidArgument, "user_id is required")
+	}
 	for _, o := range s.orders {
 		if o.UserId != req.UserId {
 			continue

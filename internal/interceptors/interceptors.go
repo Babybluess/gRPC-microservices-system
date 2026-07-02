@@ -84,7 +84,9 @@ func UnaryTracing(
 	resp, err := handler(ctx, req)
 	if err != nil {
 		span.RecordError(err)
-		span.SetStatus(otelcodes.Error, err.Error())
+		if isServerSideError(err) {
+			span.SetStatus(otelcodes.Error, err.Error())
+		}
 	}
 	return resp, err
 }
@@ -185,6 +187,28 @@ func injectMetadata(ctx context.Context) context.Context {
 	}
 	otel.GetTextMapPropagator().Inject(ctx, tracing.MetadataCarrier{MD: md})
 	return metadata.NewOutgoingContext(ctx, md)
+}
+
+func isServerSideError(err error) bool {
+	s, ok := status.FromError(err)
+	if !ok {
+		return true
+	}
+	switch s.Code() {
+	case codes.OK,
+		codes.Canceled,
+		codes.InvalidArgument,
+		codes.NotFound,
+		codes.AlreadyExists,
+		codes.PermissionDenied,
+		codes.Unauthenticated,
+		codes.FailedPrecondition,
+		codes.OutOfRange,
+		codes.Unimplemented:
+		return false
+	default:
+		return true
+	}
 }
 
 // splitMethod turns "/package.Service/Method" into ("package.Service", "Method").

@@ -10,9 +10,11 @@ import (
 	"syscall"
 
 	"google.golang.org/grpc"
+	"google.golang.org/grpc/codes"
 	"google.golang.org/grpc/health"
 	"google.golang.org/grpc/health/grpc_health_v1"
 	"google.golang.org/grpc/reflection"
+	"google.golang.org/grpc/status"
 
 	pb "grpcshop/gen/user"
 	"grpcshop/internal/config"
@@ -33,6 +35,17 @@ type server struct {
 }
 
 func (s *server) Register(_ context.Context, req *pb.RegisterRequest) (*pb.RegisterResponse, error) {
+	if req.Email == "" {
+		return nil, status.Error(codes.InvalidArgument, "email is required")
+	}
+	if req.Name == "" {
+		return nil, status.Error(codes.InvalidArgument, "name is required")
+	}
+	for _, u := range s.users {
+		if u.Email == req.Email {
+			return nil, status.Errorf(codes.AlreadyExists, "user with email %q already registered", req.Email)
+		}
+	}
 	id := fmt.Sprintf("usr_%d", len(s.users)+1)
 	s.users[id] = &pb.UserResponse{UserId: id, Email: req.Email, Name: req.Name}
 	log.Printf("registered user %s (%s)", id, req.Email)
@@ -40,9 +53,12 @@ func (s *server) Register(_ context.Context, req *pb.RegisterRequest) (*pb.Regis
 }
 
 func (s *server) GetUser(_ context.Context, req *pb.GetUserRequest) (*pb.UserResponse, error) {
+	if req.UserId == "" {
+		return nil, status.Error(codes.InvalidArgument, "user_id is required")
+	}
 	u, ok := s.users[req.UserId]
 	if !ok {
-		return nil, fmt.Errorf("user %q not found", req.UserId)
+		return nil, status.Errorf(codes.NotFound, "user %q not found", req.UserId)
 	}
 	return u, nil
 }

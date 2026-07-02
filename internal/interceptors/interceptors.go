@@ -35,24 +35,28 @@ func UnaryLogger(
 	return resp, err
 }
 
-func UnaryAuth(
-	ctx context.Context,
-	req any,
-	info *grpc.UnaryServerInfo,
-	handler grpc.UnaryHandler,
-) (any, error) {
-	if info.FullMethod == "/grpc.health.v1.Health/Check" {
+// UnaryAuth returns an interceptor that validates the Authorization header
+// against validToken. Pass cfg.AuthToken so the token comes from config.
+func UnaryAuth(validToken string) grpc.UnaryServerInterceptor {
+	return func(
+		ctx context.Context,
+		req any,
+		info *grpc.UnaryServerInfo,
+		handler grpc.UnaryHandler,
+	) (any, error) {
+		if info.FullMethod == "/grpc.health.v1.Health/Check" {
+			return handler(ctx, req)
+		}
+		md, ok := metadata.FromIncomingContext(ctx)
+		if !ok {
+			return nil, status.Error(codes.Unauthenticated, "missing metadata")
+		}
+		tokens := md.Get("authorization")
+		if len(tokens) == 0 || tokens[0] != validToken {
+			return nil, status.Error(codes.Unauthenticated, "invalid token")
+		}
 		return handler(ctx, req)
 	}
-	md, ok := metadata.FromIncomingContext(ctx)
-	if !ok {
-		return nil, status.Error(codes.Unauthenticated, "missing metadata")
-	}
-	tokens := md.Get("authorization")
-	if len(tokens) == 0 || tokens[0] != "Bearer secret-token" {
-		return nil, status.Error(codes.Unauthenticated, "invalid token")
-	}
-	return handler(ctx, req)
 }
 
 // UnaryTracing extracts the incoming W3C trace context from gRPC metadata,

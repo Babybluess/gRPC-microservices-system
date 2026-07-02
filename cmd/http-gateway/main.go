@@ -12,31 +12,34 @@ import (
 
 	orderpb "grpcshop/gen/order"
 	userpb  "grpcshop/gen/user"
+	"grpcshop/internal/config"
 	"grpcshop/internal/discovery"
 	"grpcshop/internal/tlsconfig"
 	"grpcshop/internal/tracing"
 )
 
-const (
-	httpAddr = ":8080"
-	lbPolicy = `{"loadBalancingConfig": [{"round_robin": {}}]}`
-)
+const lbPolicy = `{"loadBalancingConfig": [{"round_robin": {}}]}`
 
 func main() {
+	cfg, err := config.Load(config.Config{})
+	if err != nil {
+		log.Fatal("config:", err)
+	}
+
 	ctx := context.Background()
 
-	shutdownTracer, err := tracing.Init(ctx, "http-gateway")
+	shutdownTracer, err := tracing.Init(ctx, "http-gateway", cfg.OTLPAddr)
 	if err != nil {
 		log.Fatal("tracer:", err)
 	}
 	defer shutdownTracer(ctx)
 
-	tlsCreds, err := tlsconfig.Client("certs/ca.pem")
+	tlsCreds, err := tlsconfig.Client(cfg.CAFile)
 	if err != nil {
 		log.Fatal("tls:", err)
 	}
 
-	reg, err := discovery.NewRegistry("localhost:8500")
+	reg, err := discovery.NewRegistry(cfg.ConsulAddr)
 	if err != nil {
 		log.Fatal("consul:", err)
 	}
@@ -44,12 +47,11 @@ func main() {
 
 	dialOpts := []grpc.DialOption{
 		grpc.WithTransportCredentials(tlsCreds),
-		grpc.WithAuthority("localhost"), // cert is issued for localhost, not the consul service name
+		grpc.WithAuthority("localhost"),
 		grpc.WithDefaultServiceConfig(lbPolicy),
 	}
 
 	mux := runtime.NewServeMux(
-		// Forward the Authorization header from HTTP into gRPC metadata.
 		runtime.WithIncomingHeaderMatcher(func(key string) (string, bool) {
 			if strings.EqualFold(key, "authorization") {
 				return key, true
@@ -69,6 +71,6 @@ func main() {
 		log.Fatal("register order handler:", err)
 	}
 
-	log.Printf("http-gateway listening on %s", httpAddr)
-	log.Fatal(http.ListenAndServe(httpAddr, mux))
+	log.Printf("http-gateway listening on %s", cfg.HTTPPort)
+	log.Fatal(http.ListenAndServe(cfg.HTTPPort, mux))
 }

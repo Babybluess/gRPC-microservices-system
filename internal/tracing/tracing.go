@@ -3,7 +3,6 @@ package tracing
 import (
 	"context"
 	"fmt"
-	"os"
 
 	"go.opentelemetry.io/otel"
 	"go.opentelemetry.io/otel/exporters/otlp/otlptrace/otlptracegrpc"
@@ -14,16 +13,11 @@ import (
 	"google.golang.org/grpc/metadata"
 )
 
-// Init creates the global TracerProvider that exports spans via OTLP/gRPC.
-// Call the returned shutdown to flush buffered spans before process exit.
-func Init(ctx context.Context, serviceName string) (func(context.Context) error, error) {
-	endpoint := os.Getenv("OTEL_EXPORTER_OTLP_ENDPOINT")
-	if endpoint == "" {
-		endpoint = "localhost:4317"
-	}
-
+// Init creates the global TracerProvider that exports spans via OTLP/gRPC to
+// otlpAddr (host:port). Call the returned shutdown to flush spans before exit.
+func Init(ctx context.Context, serviceName, otlpAddr string) (func(context.Context) error, error) {
 	exp, err := otlptracegrpc.New(ctx,
-		otlptracegrpc.WithEndpoint(endpoint),
+		otlptracegrpc.WithEndpoint(otlpAddr),
 		otlptracegrpc.WithInsecure(),
 	)
 	if err != nil {

@@ -16,6 +16,7 @@ import (
 	"google.golang.org/grpc/reflection"
 
 	pb "grpcshop/gen/order"
+	"grpcshop/internal/config"
 	"grpcshop/internal/discovery"
 	"grpcshop/internal/interceptors"
 	"grpcshop/internal/tlsconfig"
@@ -23,7 +24,6 @@ import (
 )
 
 const (
-	port        = 50052
 	serviceName = "order-service"
 	serviceID   = "order-service-1"
 )
@@ -59,28 +59,33 @@ func (s *server) ListOrders(req *pb.ListOrdersRequest, stream pb.OrderService_Li
 }
 
 func main() {
+	cfg, err := config.Load(config.Config{Port: 50052})
+	if err != nil {
+		log.Fatal("config:", err)
+	}
+
 	ctx := context.Background()
 
-	shutdownTracer, err := tracing.Init(ctx, serviceName)
+	shutdownTracer, err := tracing.Init(ctx, serviceName, cfg.OTLPAddr)
 	if err != nil {
 		log.Fatal("tracer:", err)
 	}
 
-	tlsCreds, err := tlsconfig.Server("certs/server.pem", "certs/server-key.pem")
+	tlsCreds, err := tlsconfig.Server(cfg.CertFile, cfg.KeyFile)
 	if err != nil {
 		log.Fatal("tls:", err)
 	}
 
-	registry, err := discovery.NewRegistry("localhost:8500")
+	registry, err := discovery.NewRegistry(cfg.ConsulAddr)
 	if err != nil {
 		log.Fatal("consul:", err)
 	}
-	if err := registry.Register(serviceName, serviceID, "localhost", port); err != nil {
+	if err := registry.Register(serviceName, serviceID, cfg.ServiceHost, cfg.Port); err != nil {
 		log.Fatal("register:", err)
 	}
 	defer registry.Deregister(serviceID)
 
-	lis, err := net.Listen("tcp", fmt.Sprintf(":%d", port))
+	lis, err := net.Listen("tcp", fmt.Sprintf(":%d", cfg.Port))
 	if err != nil {
 		log.Fatal(err)
 	}
@@ -90,7 +95,7 @@ func main() {
 		grpc.ChainUnaryInterceptor(
 			interceptors.UnaryLogger,
 			interceptors.UnaryTracing,
-			interceptors.UnaryAuth,
+			interceptors.UnaryAuth(cfg.AuthToken),
 		),
 	)
 	pb.RegisterOrderServiceServer(grpcServer, &server{})
@@ -99,7 +104,7 @@ func main() {
 	healthSrv.SetServingStatus("", grpc_health_v1.HealthCheckResponse_SERVING)
 	reflection.Register(grpcServer)
 
-	log.Printf("order-service listening on :%d", port)
+	log.Printf("order-service listening on :%d", cfg.Port)
 
 	go func() {
 		quit := make(chan os.Signal, 1)

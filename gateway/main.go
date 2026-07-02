@@ -11,39 +11,43 @@ import (
 
 	orderpb "grpcshop/gen/order"
 	userpb  "grpcshop/gen/user"
+	"grpcshop/internal/config"
 	"grpcshop/internal/discovery"
 	"grpcshop/internal/interceptors"
 	"grpcshop/internal/tlsconfig"
 	"grpcshop/internal/tracing"
 )
 
-// round-robin across all addresses the consul resolver returns
 const lbPolicy = `{"loadBalancingConfig": [{"round_robin": {}}]}`
 
 func main() {
+	cfg, err := config.Load(config.Config{})
+	if err != nil {
+		log.Fatal("config:", err)
+	}
+
 	ctx := context.Background()
 
-	shutdownTracer, err := tracing.Init(ctx, "gateway")
+	shutdownTracer, err := tracing.Init(ctx, "gateway", cfg.OTLPAddr)
 	if err != nil {
 		log.Fatal("tracer:", err)
 	}
 	defer shutdownTracer(ctx)
 
-	tlsCreds, err := tlsconfig.Client("certs/ca.pem")
+	tlsCreds, err := tlsconfig.Client(cfg.CAFile)
 	if err != nil {
 		log.Fatal("tls:", err)
 	}
 
-	reg, err := discovery.NewRegistry("localhost:8500")
+	reg, err := discovery.NewRegistry(cfg.ConsulAddr)
 	if err != nil {
 		log.Fatal(err)
 	}
-	// Register once; all grpc.NewClient calls with scheme "consul" use it.
 	resolver.Register(discovery.NewBuilder(reg))
 
 	dialOpts := []grpc.DialOption{
 		grpc.WithTransportCredentials(tlsCreds),
-		grpc.WithAuthority("localhost"), // cert is issued for localhost, not the consul service name
+		grpc.WithAuthority("localhost"),
 		grpc.WithDefaultServiceConfig(lbPolicy),
 		grpc.WithChainUnaryInterceptor(interceptors.UnaryClientTracing),
 		grpc.WithChainStreamInterceptor(interceptors.StreamClientTracing),
@@ -57,7 +61,7 @@ func main() {
 	userClient  := userpb.NewUserServiceClient(userConn)
 	orderClient := orderpb.NewOrderServiceClient(orderConn)
 
-	ctx = metadata.AppendToOutgoingContext(ctx, "authorization", "Bearer secret-token")
+	ctx = metadata.AppendToOutgoingContext(ctx, "authorization", cfg.AuthToken)
 	ctx, cancel := context.WithTimeout(ctx, 5*time.Second)
 	defer cancel()
 
@@ -94,7 +98,6 @@ func main() {
 	}
 }
 
-// mustDial connects to "consul:///<name>" using the registered consul resolver.
 func mustDial(name string, opts ...grpc.DialOption) *grpc.ClientConn {
 	conn, err := grpc.NewClient("consul:///"+name, opts...)
 	if err != nil {

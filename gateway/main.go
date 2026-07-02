@@ -43,6 +43,7 @@ func main() {
 
 	dialOpts := []grpc.DialOption{
 		grpc.WithTransportCredentials(tlsCreds),
+		grpc.WithAuthority("localhost"), // cert is issued for localhost, not the consul service name
 		grpc.WithDefaultServiceConfig(lbPolicy),
 		grpc.WithChainUnaryInterceptor(interceptors.UnaryClientTracing),
 		grpc.WithChainStreamInterceptor(interceptors.StreamClientTracing),

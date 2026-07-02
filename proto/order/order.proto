@@ -2,9 +2,20 @@ syntax = "proto3";
 package order;
 option go_package = "grpcshop/gen/order";
 
+import "google/api/annotations.proto";
+
 service OrderService {
-  rpc CreateOrder(CreateOrderRequest) returns (OrderResponse);
-  rpc ListOrders (ListOrdersRequest)  returns (stream OrderResponse);
+  rpc CreateOrder(CreateOrderRequest) returns (OrderResponse) {
+    option (google.api.http) = {
+      post: "/v1/orders"
+      body: "*"
+    };
+  }
+  rpc ListOrders(ListOrdersRequest) returns (stream OrderResponse) {
+    option (google.api.http) = {
+      get: "/v1/users/{user_id}/orders"
+    };
+  }
 }
 
 message CreateOrderRequest {

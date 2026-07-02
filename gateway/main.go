@@ -7,6 +7,7 @@ import (
 
 	"google.golang.org/grpc"
 	"google.golang.org/grpc/metadata"
+	"google.golang.org/grpc/resolver"
 
 	orderpb "grpcshop/gen/order"
 	userpb  "grpcshop/gen/user"
@@ -15,6 +16,9 @@ import (
 	"grpcshop/internal/tlsconfig"
 	"grpcshop/internal/tracing"
 )
+
+// round-robin across all addresses the consul resolver returns
+const lbPolicy = `{"loadBalancingConfig": [{"round_robin": {}}]}`
 
 func main() {
 	ctx := context.Background()
@@ -30,19 +34,22 @@ func main() {
 		log.Fatal("tls:", err)
 	}
 
-	registry, err := discovery.NewRegistry("localhost:8500")
+	reg, err := discovery.NewRegistry("localhost:8500")
 	if err != nil {
 		log.Fatal(err)
 	}
+	// Register once; all grpc.NewClient calls with scheme "consul" use it.
+	resolver.Register(discovery.NewBuilder(reg))
 
 	dialOpts := []grpc.DialOption{
 		grpc.WithTransportCredentials(tlsCreds),
+		grpc.WithDefaultServiceConfig(lbPolicy),
 		grpc.WithChainUnaryInterceptor(interceptors.UnaryClientTracing),
 		grpc.WithChainStreamInterceptor(interceptors.StreamClientTracing),
 	}
 
-	userConn  := mustDial(registry, "user-service", dialOpts...)
-	orderConn := mustDial(registry, "order-service", dialOpts...)
+	userConn  := mustDial("user-service", dialOpts...)
+	orderConn := mustDial("order-service", dialOpts...)
 	defer userConn.Close()
 	defer orderConn.Close()
 
@@ -86,12 +93,9 @@ func main() {
 	}
 }
 
-func mustDial(r *discovery.Registry, name string, opts ...grpc.DialOption) *grpc.ClientConn {
-	addr, err := r.Discover(name)
-	if err != nil {
-		log.Fatalf("discover %s: %v", name, err)
-	}
-	conn, err := grpc.NewClient(addr, opts...)
+// mustDial connects to "consul:///<name>" using the registered consul resolver.
+func mustDial(name string, opts ...grpc.DialOption) *grpc.ClientConn {
+	conn, err := grpc.NewClient("consul:///"+name, opts...)
 	if err != nil {
 		log.Fatalf("dial %s: %v", name, err)
 	}
